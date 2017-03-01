@@ -1,0 +1,17 @@
+{
+  "name": "runway-model-philosophers",
+  "version": "0.1.0",
+  "description": "Dining philosophers",
+  "keywords": [
+    "runway"
+  ],
+  "author": "jnszkr",
+  "license": "MIT",
+  "models": {
+    "main": {
+      "name": "Philosophers",
+      "spec": "philosophers.model",
+      "view": "philosophers.js"
+    }
+  }
+}

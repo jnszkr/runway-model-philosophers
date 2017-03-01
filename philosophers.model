@@ -1,0 +1,217 @@
+
+type PersonId : 1..5;
+type ForkId   : 1..5;
+
+type Fork : either {
+  Taken { by: PersonId },
+  NotTaken
+};
+
+type Philosopher : either {
+  Thinking {
+    startAt : Time,
+    doneAt  : Time
+  },
+  Eating {
+    startAt : Time,
+    doneAt  : Time,
+    right   : Fork,
+    left    : Fork
+  },
+  Waiting {
+    startAt : Time,
+    right   : Fork,
+    left    : Fork
+  }
+};
+
+
+type Log: record {
+  atTime      : Time,
+  philosopher : Philosopher,
+};
+var logs: Output<Log>;
+
+var table: Array<Philosopher>[PersonId];
+for person in table {
+  person = Thinking {
+    startAt : later(0),
+    doneAt  : later(urandomRange(0, 30000)),
+  };
+}
+
+var forks: Array<Fork>[PersonId];
+for fork in forks {
+  fork = NotTaken;
+}
+
+rule step for pid, philosopher in table {
+  /*var leftForkId  : ForkId = pid;
+  var rightForkId : ForkId = (pid % 5) + 1;*/
+
+  match philosopher {
+
+    Thinking (p) {
+      var leftForkId  : ForkId = pid;
+      var rightForkId : ForkId = (pid % 5) + 1;
+
+      if past(p.doneAt) {
+        philosopher = Waiting {
+          startAt : later(0),
+          left    : forks[leftForkId],
+          right   : forks[rightForkId]
+        };
+      }
+    }
+
+    Waiting (p) {
+      var leftForkId  : ForkId = pid;
+      var rightForkId : ForkId = (pid % 5) + 1;
+
+      /* Wrong implementation */
+      /*if p.left == NotTaken && forks[leftForkId] == NotTaken {
+        forks[leftForkId]  = Taken { by: pid };
+        philosopher = Waiting {
+          left    : Taken { by: pid },
+        };
+      }
+
+      if p.right == NotTaken && forks[rightForkId] == NotTaken {
+        forks[rightForkId]  = Taken { by: pid };
+        philosopher = Waiting {
+          right   : Taken { by: pid },
+        };
+      }
+
+      if p.left == Taken { by: pid } && p.right == Taken { by: pid } {
+        philosopher = Eating {
+          startAt : later(0),
+          doneAt  : later(urandomRange(3000, 10000)),
+          left    : Taken { by: pid },
+          right   : Taken { by: pid },
+        };
+      }*/
+
+      if forks[leftForkId] == NotTaken && forks[rightForkId] == NotTaken {
+        forks[leftForkId]  = Taken { by: pid };
+        forks[rightForkId] = Taken { by: pid };
+        philosopher = Eating {
+          startAt : later(0),
+          doneAt  : later(urandomRange(3000, 10000)),
+          left    : forks[leftForkId],
+          right   : forks[rightForkId],
+        };
+      }
+    }
+
+    Eating (p) {
+      var leftForkId  : ForkId = pid;
+      var rightForkId : ForkId = (pid % 5) + 1;
+
+      if past(p.doneAt) {
+        forks[leftForkId]  = NotTaken;
+        forks[rightForkId] = NotTaken;
+        philosopher = Thinking {
+          startAt : later(0),
+          doneAt  : later(urandomRange(10000, 50000))
+        };
+      }
+    }
+  }
+}
+
+var numberOfWaitings   : 0..5 = 0;
+var numberOfEatings    : 0..5 = 0;
+var numberOfForksTaken : 0..5 = 0;
+
+invariant deadlock {
+  numberOfWaitings   = 0;
+  numberOfForksTaken = 0;
+
+  for pid, philosopher in table {
+    match philosopher {
+      Waiting (w) {
+        numberOfWaitings += 1;
+      }
+      default {}
+    }
+  }
+
+  for fork in forks {
+    match fork {
+      Taken (f) {
+        numberOfForksTaken += 1;
+      }
+      default {}
+    }
+  }
+  assert (numberOfWaitings <= 5 && numberOfForksTaken < 5);
+}
+
+invariant philosopherHasTheCorrectForks {
+  for pid, philosopher in table {
+    match philosopher {
+      Eating (p) {
+        match forks[pid] {
+          Taken (f) {
+            assert f.by == pid;
+          }
+          NotTaken {
+            assert False;
+          }
+        }
+        match forks[(pid % 5 + 1)] {
+          Taken (f) {
+            assert f.by == pid;
+          }
+          NotTaken {
+            assert False;
+          }
+        }
+      }
+      default {}
+    }
+  }
+}
+
+invariant impossibleState {
+  numberOfEatings = 0;
+
+  for philosopher in table {
+    match philosopher {
+      Eating (w) {
+        numberOfEatings += 1;
+      }
+      default {}
+    }
+  }
+
+  assert numberOfEatings < 5;
+}
+
+
+invariant forkIsTakenByRightPhilosopher {
+  numberOfEatings = 0;
+
+  for pid, philosopher in table {
+    match philosopher {
+      Eating (p) {
+        match p.left {
+          Taken (fork) {
+            assert fork.by == pid;
+          }
+          default {}
+        }
+        match p.right {
+          Taken (fork) {
+            assert fork.by == pid;
+          }
+          default {}
+        }
+      }
+      default {}
+    }
+  }
+
+  assert numberOfEatings < 5;
+}
